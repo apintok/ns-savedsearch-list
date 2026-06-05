@@ -1,0 +1,23 @@
+table.ns-ssl-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 16px;
+  table-layout: fixed;
+}
+
+table.ns-ssl-table td {
+  width: 33.33%;
+  padding: 6px 12px 6px 0;
+  vertical-align: top;
+  border: none;
+}
+
+table.ns-ssl-table a {
+  display: inline-block;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+table.ns-ssl-table a:hover {
+  text-decoration: underline;
+}
