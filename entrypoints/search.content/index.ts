@@ -1,8 +1,11 @@
 import './style.css';
 
 const TRANSFORMED_ATTR = 'data-ns-ssl-transformed';
+const FILTER_INPUT_ID = 'ns-ssl-filter-input';
 const MIN_RECORD_TYPES = 3;
 const COLUMNS = 3;
+
+const tableLinks = new WeakMap<HTMLTableElement, HTMLAnchorElement[]>();
 
 const NETSUITE_SEARCH_MATCHES = [
   '*://*.app.netsuite.com/app/common/search/search.nl*',
@@ -77,8 +80,11 @@ function transformWhenReady(): void {
   }
 
   const sortedLinks = sortLinks(links);
-  rebuildTableBody(table, sortedLinks);
+  tableLinks.set(table, sortedLinks);
+
   updateTableHeader(table);
+  installFilterBar(table, sortedLinks.length);
+  renderLinks(table, sortedLinks);
 
   table.setAttribute(TRANSFORMED_ATTR, 'true');
   table.classList.add('ns-ssl-transformed');
@@ -150,9 +156,106 @@ function updateTableHeader(table: HTMLTableElement): void {
   }
 }
 
+function installFilterBar(table: HTMLTableElement, totalCount: number): void {
+  const thead = table.querySelector('thead');
+  if (!thead || thead.querySelector('.ns-ssl-filter-row')) {
+    return;
+  }
+
+  const row = document.createElement('tr');
+  row.className = 'ns-ssl-filter-row';
+
+  const cell = document.createElement('td');
+  cell.colSpan = COLUMNS;
+  cell.className = 'ns-ssl-filter-cell';
+
+  const label = document.createElement('label');
+  label.className = 'ns-ssl-filter-label';
+  label.htmlFor = FILTER_INPUT_ID;
+  label.textContent = 'Filter search types';
+
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.id = FILTER_INPUT_ID;
+  input.className = 'ns-ssl-filter-input';
+  input.placeholder = 'Search by name…';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+
+  const status = document.createElement('span');
+  status.className = 'ns-ssl-filter-status';
+  status.dataset.total = String(totalCount);
+  updateFilterStatus(status, totalCount, totalCount);
+
+  input.addEventListener('input', () => {
+    const allLinks = tableLinks.get(table) ?? [];
+    const query = input.value.trim();
+    const filtered = filterLinksByName(allLinks, query);
+    renderLinks(table, filtered);
+    updateFilterStatus(status, filtered.length, totalCount, query);
+  });
+
+  label.appendChild(input);
+  cell.appendChild(label);
+  cell.appendChild(status);
+  row.appendChild(cell);
+  thead.appendChild(row);
+}
+
+function updateFilterStatus(
+  status: HTMLSpanElement,
+  visibleCount: number,
+  totalCount: number,
+  query = '',
+): void {
+  if (query && visibleCount === 0) {
+    status.textContent = `No matches for “${query}”`;
+    return;
+  }
+
+  if (query) {
+    status.textContent = `Showing ${visibleCount} of ${totalCount}`;
+    return;
+  }
+
+  status.textContent = `${totalCount} search types`;
+}
+
+function filterLinksByName(
+  links: HTMLAnchorElement[],
+  query: string,
+): HTMLAnchorElement[] {
+  if (!query) {
+    return links;
+  }
+
+  const normalizedQuery = query.toLocaleLowerCase();
+  return links.filter((link) =>
+    getLinkLabel(link).toLocaleLowerCase().includes(normalizedQuery),
+  );
+}
+
+function renderLinks(table: HTMLTableElement, links: HTMLAnchorElement[]): void {
+  rebuildTableBody(table, links);
+}
+
 function rebuildTableBody(table: HTMLTableElement, links: HTMLAnchorElement[]): void {
   const tbody = table.querySelector('tbody');
   if (!tbody) {
+    return;
+  }
+
+  if (links.length === 0) {
+    const emptyRow = document.createElement('tr');
+    emptyRow.className = 'ns-ssl-empty-row';
+
+    const emptyCell = document.createElement('td');
+    emptyCell.colSpan = COLUMNS;
+    emptyCell.className = 'ns-ssl-empty-cell listtext';
+    emptyCell.textContent = 'No search types match your filter.';
+
+    emptyRow.appendChild(emptyCell);
+    tbody.replaceChildren(emptyRow);
     return;
   }
 
@@ -180,6 +283,7 @@ function buildRow(rowIndex: number, links: HTMLAnchorElement[]): HTMLTableRowEle
 
     const link = links[rowIndex * COLUMNS + columnIndex];
     if (link) {
+      cell.dataset.nsSslLabel = getLinkLabel(link);
       cell.appendChild(link);
     }
 

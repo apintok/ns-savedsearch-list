@@ -17,6 +17,7 @@ Load the unpacked extension from `.output/chrome-mv3-dev` in `chrome://extension
 1. Install the extension.
 2. In NetSuite, go to **Reports → Saved Searches → All Saved Searches → New**.
 3. The record type list is displayed as a 3-column table, sorted alphabetically.
+4. Use the **Filter search types** field above the list to search by name.
 
 ## Troubleshooting
 

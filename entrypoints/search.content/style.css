@@ -11,3 +11,48 @@ table.ns-ssl-transformed tbody a.dottedlink {
   display: inline-block;
   line-height: 1.4;
 }
+
+.ns-ssl-filter-row .ns-ssl-filter-cell {
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #d6d6d6;
+}
+
+.ns-ssl-filter-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ns-ssl-filter-input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  padding: 6px 10px;
+  border: 1px solid #b0b0b0;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.ns-ssl-filter-input:focus {
+  outline: 2px solid #4a90d9;
+  outline-offset: 1px;
+  border-color: #4a90d9;
+}
+
+.ns-ssl-filter-status {
+  display: inline-block;
+  margin-top: 6px;
+  margin-left: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.ns-ssl-empty-cell {
+  padding: 16px 12px;
+  color: #666;
+  font-style: italic;
+}
