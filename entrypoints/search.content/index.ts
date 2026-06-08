@@ -1,7 +1,7 @@
 import './style.css';
 
 const TABLE_ID = 'ns-ssl-record-type-table';
-const MIN_RECORD_TYPES = 5;
+const MIN_RECORD_TYPES = 3;
 const COLUMNS = 3;
 
 const NETSUITE_SEARCH_MATCHES = [
@@ -12,12 +12,16 @@ const NETSUITE_SEARCH_MATCHES = [
 
 export default defineContentScript({
   matches: NETSUITE_SEARCH_MATCHES,
+  allFrames: true,
+  matchOriginAsFallback: true,
   runAt: 'document_idle',
   cssInjectionMode: 'manifest',
   main() {
     if (!isRecordTypeSelectionPage()) {
       return;
     }
+
+    document.documentElement.dataset.nsSsl = 'active';
 
     transformWhenReady();
 
@@ -28,24 +32,37 @@ export default defineContentScript({
       transformWhenReady();
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        observer.observe(document.body, { childList: true, subtree: true });
+        transformWhenReady();
+      });
+    }
+
+    window.setTimeout(transformWhenReady, 500);
+    window.setTimeout(transformWhenReady, 1500);
+    window.setTimeout(transformWhenReady, 3000);
   },
 });
 
 function isRecordTypeSelectionPage(): boolean {
   const url = new URL(location.href);
 
-  if (!url.pathname.endsWith('/app/common/search/search.nl')) {
+  if (!/\/app\/common\/search\/search\.nl\/?$/i.test(url.pathname)) {
     return false;
   }
 
-  const hasSearchContext =
-    url.searchParams.has('searchtype') ||
-    url.searchParams.has('id') ||
-    url.searchParams.has('e') ||
-    url.searchParams.has('searchid');
+  if (url.searchParams.has('searchtype')) {
+    return false;
+  }
 
-  return !hasSearchContext;
+  if (url.searchParams.has('id') || url.searchParams.has('searchid')) {
+    return false;
+  }
+
+  return true;
 }
 
 function transformWhenReady(): void {
@@ -65,6 +82,7 @@ function transformWhenReady(): void {
 
   const table = buildTable(links);
   container.replaceChildren(table);
+  document.documentElement.dataset.nsSsl = 'transformed';
 }
 
 function findRecordTypeLinks(): HTMLAnchorElement[] {
@@ -76,7 +94,7 @@ function findRecordTypeLinks(): HTMLAnchorElement[] {
       continue;
     }
 
-    const key = anchor.href;
+    const key = getLinkKey(anchor);
     if (seen.has(key)) {
       continue;
     }
@@ -94,12 +112,35 @@ function findRecordTypeLinks(): HTMLAnchorElement[] {
 
 function isRecordTypeLink(anchor: HTMLAnchorElement): boolean {
   const href = anchor.getAttribute('href') ?? '';
-  if (!/search\.nl/i.test(href) || !/searchtype=/i.test(href)) {
+  const resolved = anchor.href;
+
+  if (!hasSearchTypeParam(href) && !hasSearchTypeParam(resolved)) {
+    return false;
+  }
+
+  if (!mentionsSearchNl(href) && !mentionsSearchNl(resolved)) {
     return false;
   }
 
   const label = getLinkLabel(anchor);
   return label.length > 0;
+}
+
+function hasSearchTypeParam(value: string): boolean {
+  return /[?&]searchtype=/i.test(value);
+}
+
+function mentionsSearchNl(value: string): boolean {
+  return /search\.nl/i.test(value);
+}
+
+function getLinkKey(anchor: HTMLAnchorElement): string {
+  try {
+    const url = new URL(anchor.href, location.origin);
+    return url.searchParams.get('searchtype')?.toLowerCase() ?? anchor.href;
+  } catch {
+    return anchor.href;
+  }
 }
 
 function getLinkLabel(anchor: HTMLAnchorElement): string {
@@ -109,16 +150,21 @@ function getLinkLabel(anchor: HTMLAnchorElement): string {
 function findListContainer(links: HTMLAnchorElement[]): HTMLElement | null {
   const firstLink = links[0];
   let node: HTMLElement | null = firstLink.parentElement;
+  let best: HTMLElement | null = null;
 
   while (node && node !== document.body) {
-    const containedLinks = node.querySelectorAll('a[href*="search.nl"][href*="searchtype="]');
-    if (containedLinks.length === links.length) {
-      return node;
+    const containedLinks = [...node.querySelectorAll<HTMLAnchorElement>('a[href]')].filter(
+      isRecordTypeLink,
+    );
+
+    if (containedLinks.length >= links.length) {
+      best = node;
     }
+
     node = node.parentElement;
   }
 
-  return firstLink.parentElement;
+  return best ?? firstLink.parentElement;
 }
 
 function buildTable(links: HTMLAnchorElement[]): HTMLTableElement {
@@ -136,7 +182,7 @@ function buildTable(links: HTMLAnchorElement[]): HTMLTableElement {
       const link = links[rowIndex * COLUMNS + columnIndex];
 
       if (link) {
-        cell.appendChild(cloneRecordTypeLink(link));
+        cell.appendChild(link);
       }
 
       row.appendChild(cell);
@@ -147,17 +193,4 @@ function buildTable(links: HTMLAnchorElement[]): HTMLTableElement {
 
   table.appendChild(tbody);
   return table;
-}
-
-function cloneRecordTypeLink(source: HTMLAnchorElement): HTMLAnchorElement {
-  const link = document.createElement('a');
-  link.href = source.href;
-  link.textContent = getLinkLabel(source);
-  link.title = source.title || getLinkLabel(source);
-
-  for (const className of source.classList) {
-    link.classList.add(className);
-  }
-
-  return link;
 }
