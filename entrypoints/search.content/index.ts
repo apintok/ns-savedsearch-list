@@ -1,6 +1,6 @@
 import './style.css';
 
-const TABLE_ID = 'ns-ssl-record-type-table';
+const TRANSFORMED_ATTR = 'data-ns-ssl-transformed';
 const MIN_RECORD_TYPES = 3;
 const COLUMNS = 3;
 
@@ -26,7 +26,7 @@ export default defineContentScript({
     transformWhenReady();
 
     const observer = new MutationObserver(() => {
-      if (document.getElementById(TABLE_ID)) {
+      if (findSearchTypeTable()?.hasAttribute(TRANSFORMED_ATTR)) {
         return;
       }
       transformWhenReady();
@@ -66,31 +66,60 @@ function isRecordTypeSelectionPage(): boolean {
 }
 
 function transformWhenReady(): void {
-  if (document.getElementById(TABLE_ID)) {
+  const table = findSearchTypeTable();
+  if (!table || table.hasAttribute(TRANSFORMED_ATTR)) {
     return;
   }
 
-  const links = findRecordTypeLinks();
+  const links = collectLinksFromTable(table);
   if (links.length < MIN_RECORD_TYPES) {
     return;
   }
 
-  const container = findListContainer(links);
-  if (!container) {
-    return;
-  }
+  const sortedLinks = sortLinks(links);
+  rebuildTableBody(table, sortedLinks);
+  updateTableHeader(table);
 
-  const table = buildTable(links);
-  container.replaceChildren(table);
+  table.setAttribute(TRANSFORMED_ATTR, 'true');
+  table.classList.add('ns-ssl-transformed');
   document.documentElement.dataset.nsSsl = 'transformed';
 }
 
-function findRecordTypeLinks(): HTMLAnchorElement[] {
+function findSearchTypeTable(): HTMLTableElement | null {
+  const byId = document.querySelector<HTMLTableElement>('table#__tab');
+  if (byId && hasSearchTypeRows(byId)) {
+    return byId;
+  }
+
+  for (const table of document.querySelectorAll<HTMLTableElement>(
+    'table.listtable, table.uir-list-table',
+  )) {
+    if (hasSearchTypeRows(table)) {
+      return table;
+    }
+  }
+
+  return null;
+}
+
+function hasSearchTypeRows(table: HTMLTableElement): boolean {
+  const header = table.querySelector(
+    'thead [data-label="Search Type"], thead .listheader',
+  );
+  if (!header) {
+    return false;
+  }
+
+  return collectLinksFromTable(table).length >= MIN_RECORD_TYPES;
+}
+
+function collectLinksFromTable(table: HTMLTableElement): HTMLAnchorElement[] {
   const seen = new Set<string>();
   const links: HTMLAnchorElement[] = [];
 
-  for (const anchor of document.querySelectorAll<HTMLAnchorElement>('a[href]')) {
-    if (!isRecordTypeLink(anchor)) {
+  for (const row of table.querySelectorAll<HTMLTableRowElement>('tbody tr')) {
+    const anchor = row.querySelector<HTMLAnchorElement>('a[href]');
+    if (!anchor || !isRecordTypeLink(anchor)) {
       continue;
     }
 
@@ -103,11 +132,61 @@ function findRecordTypeLinks(): HTMLAnchorElement[] {
     links.push(anchor);
   }
 
-  return links.sort((a, b) =>
+  return links;
+}
+
+function sortLinks(links: HTMLAnchorElement[]): HTMLAnchorElement[] {
+  return [...links].sort((a, b) =>
     getLinkLabel(a).localeCompare(getLinkLabel(b), undefined, {
       sensitivity: 'base',
     }),
   );
+}
+
+function updateTableHeader(table: HTMLTableElement): void {
+  const headerCell = table.querySelector<HTMLTableCellElement>('thead td');
+  if (headerCell) {
+    headerCell.colSpan = COLUMNS;
+  }
+}
+
+function rebuildTableBody(table: HTMLTableElement, links: HTMLAnchorElement[]): void {
+  const tbody = table.querySelector('tbody');
+  if (!tbody) {
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  for (let rowIndex = 0; rowIndex < Math.ceil(links.length / COLUMNS); rowIndex++) {
+    fragment.appendChild(buildRow(rowIndex, links));
+  }
+
+  tbody.replaceChildren(fragment);
+}
+
+function buildRow(rowIndex: number, links: HTMLAnchorElement[]): HTMLTableRowElement {
+  const row = document.createElement('tr');
+  row.className =
+    rowIndex % 2 === 0
+      ? 'uir-list-row-tr uir-list-row-even'
+      : 'uir-list-row-tr uir-list-row-odd';
+  row.id = `row${rowIndex}`;
+
+  for (let columnIndex = 0; columnIndex < COLUMNS; columnIndex++) {
+    const cell = document.createElement('td');
+    cell.className = 'listtext uir-list-row-cell';
+    cell.dataset.listCellType = 'string';
+
+    const link = links[rowIndex * COLUMNS + columnIndex];
+    if (link) {
+      cell.appendChild(link);
+    }
+
+    row.appendChild(cell);
+  }
+
+  return row;
 }
 
 function isRecordTypeLink(anchor: HTMLAnchorElement): boolean {
@@ -122,8 +201,7 @@ function isRecordTypeLink(anchor: HTMLAnchorElement): boolean {
     return false;
   }
 
-  const label = getLinkLabel(anchor);
-  return label.length > 0;
+  return getLinkLabel(anchor).length > 0;
 }
 
 function hasSearchTypeParam(value: string): boolean {
@@ -137,7 +215,9 @@ function mentionsSearchNl(value: string): boolean {
 function getLinkKey(anchor: HTMLAnchorElement): string {
   try {
     const url = new URL(anchor.href, location.origin);
-    return url.searchParams.get('searchtype')?.toLowerCase() ?? anchor.href;
+    const searchtype = url.searchParams.get('searchtype')?.toLowerCase() ?? '';
+    const rectype = url.searchParams.get('rectype') ?? '';
+    return `${searchtype}:${rectype}`;
   } catch {
     return anchor.href;
   }
@@ -145,52 +225,4 @@ function getLinkKey(anchor: HTMLAnchorElement): string {
 
 function getLinkLabel(anchor: HTMLAnchorElement): string {
   return anchor.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-}
-
-function findListContainer(links: HTMLAnchorElement[]): HTMLElement | null {
-  const firstLink = links[0];
-  let node: HTMLElement | null = firstLink.parentElement;
-  let best: HTMLElement | null = null;
-
-  while (node && node !== document.body) {
-    const containedLinks = [...node.querySelectorAll<HTMLAnchorElement>('a[href]')].filter(
-      isRecordTypeLink,
-    );
-
-    if (containedLinks.length >= links.length) {
-      best = node;
-    }
-
-    node = node.parentElement;
-  }
-
-  return best ?? firstLink.parentElement;
-}
-
-function buildTable(links: HTMLAnchorElement[]): HTMLTableElement {
-  const table = document.createElement('table');
-  table.id = TABLE_ID;
-  table.className = 'ns-ssl-table uir-list-table';
-
-  const tbody = document.createElement('tbody');
-
-  for (let rowIndex = 0; rowIndex < Math.ceil(links.length / COLUMNS); rowIndex++) {
-    const row = document.createElement('tr');
-
-    for (let columnIndex = 0; columnIndex < COLUMNS; columnIndex++) {
-      const cell = document.createElement('td');
-      const link = links[rowIndex * COLUMNS + columnIndex];
-
-      if (link) {
-        cell.appendChild(link);
-      }
-
-      row.appendChild(cell);
-    }
-
-    tbody.appendChild(row);
-  }
-
-  table.appendChild(tbody);
-  return table;
 }
