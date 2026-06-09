@@ -5,6 +5,7 @@ const FILTER_INPUT_ID = 'ns-ssl-filter-input';
 const MIN_RECORD_TYPES = 3;
 const COLUMNS = 3;
 
+/** Full sorted link list per table, used when filtering without re-reading the DOM. */
 const tableLinks = new WeakMap<HTMLTableElement, HTMLAnchorElement[]>();
 
 const NETSUITE_SEARCH_MATCHES = [
@@ -19,6 +20,7 @@ export default defineContentScript({
   matchOriginAsFallback: true,
   runAt: 'document_idle',
   cssInjectionMode: 'manifest',
+  /** Entry point: watches the page and transforms the search-type list when it appears. */
   main() {
     if (!isRecordTypeSelectionPage()) {
       return;
@@ -50,6 +52,9 @@ export default defineContentScript({
   },
 });
 
+/**
+ * Returns true when the URL is the New Saved Search picker (no search type selected yet).
+ */
 function isRecordTypeSelectionPage(): boolean {
   const url = new URL(location.href);
 
@@ -68,6 +73,9 @@ function isRecordTypeSelectionPage(): boolean {
   return true;
 }
 
+/**
+ * Locates the search-type table, rebuilds it as a 3-column layout, and adds the filter bar.
+ */
 function transformWhenReady(): void {
   const table = findSearchTypeTable();
   if (!table || table.hasAttribute(TRANSFORMED_ATTR)) {
@@ -91,6 +99,9 @@ function transformWhenReady(): void {
   document.documentElement.dataset.nsSsl = 'transformed';
 }
 
+/**
+ * Finds the NetSuite list table that contains the "Search Type" record picker.
+ */
 function findSearchTypeTable(): HTMLTableElement | null {
   const byId = document.querySelector<HTMLTableElement>('table#__tab');
   if (byId && hasSearchTypeRows(byId)) {
@@ -108,6 +119,9 @@ function findSearchTypeTable(): HTMLTableElement | null {
   return null;
 }
 
+/**
+ * Checks whether a table is the search-type picker by its header and row count.
+ */
 function hasSearchTypeRows(table: HTMLTableElement): boolean {
   const header = table.querySelector(
     'thead [data-label="Search Type"], thead .listheader',
@@ -119,6 +133,9 @@ function hasSearchTypeRows(table: HTMLTableElement): boolean {
   return collectLinksFromTable(table).length >= MIN_RECORD_TYPES;
 }
 
+/**
+ * Extracts unique record-type links from the table body, one per row.
+ */
 function collectLinksFromTable(table: HTMLTableElement): HTMLAnchorElement[] {
   const seen = new Set<string>();
   const links: HTMLAnchorElement[] = [];
@@ -141,6 +158,7 @@ function collectLinksFromTable(table: HTMLTableElement): HTMLAnchorElement[] {
   return links;
 }
 
+/** Sorts record-type links alphabetically by their visible label. */
 function sortLinks(links: HTMLAnchorElement[]): HTMLAnchorElement[] {
   return [...links].sort((a, b) =>
     getLinkLabel(a).localeCompare(getLinkLabel(b), undefined, {
@@ -149,6 +167,7 @@ function sortLinks(links: HTMLAnchorElement[]): HTMLAnchorElement[] {
   );
 }
 
+/** Expands the "Search Type" header cell to span all three columns. */
 function updateTableHeader(table: HTMLTableElement): void {
   const headerCell = table.querySelector<HTMLTableCellElement>('thead td');
   if (headerCell) {
@@ -156,6 +175,9 @@ function updateTableHeader(table: HTMLTableElement): void {
   }
 }
 
+/**
+ * Inserts a filter input row below the table header and wires it to live filtering.
+ */
 function installFilterBar(table: HTMLTableElement, totalCount: number): void {
   const thead = table.querySelector('thead');
   if (!thead || thead.querySelector('.ns-ssl-filter-row')) {
@@ -202,6 +224,9 @@ function installFilterBar(table: HTMLTableElement, totalCount: number): void {
   thead.appendChild(row);
 }
 
+/**
+ * Updates the filter status text (total count, filtered count, or no-match message).
+ */
 function updateFilterStatus(
   status: HTMLSpanElement,
   visibleCount: number,
@@ -221,6 +246,9 @@ function updateFilterStatus(
   status.textContent = `${totalCount} search types`;
 }
 
+/**
+ * Returns links whose visible label contains the filter query (case-insensitive).
+ */
 function filterLinksByName(
   links: HTMLAnchorElement[],
   query: string,
@@ -235,10 +263,14 @@ function filterLinksByName(
   );
 }
 
+/** Renders the given links into the table body. */
 function renderLinks(table: HTMLTableElement, links: HTMLAnchorElement[]): void {
   rebuildTableBody(table, links);
 }
 
+/**
+ * Replaces tbody content with a 3-column grid of links, or an empty-state row.
+ */
 function rebuildTableBody(table: HTMLTableElement, links: HTMLAnchorElement[]): void {
   const tbody = table.querySelector('tbody');
   if (!tbody) {
@@ -268,6 +300,9 @@ function rebuildTableBody(table: HTMLTableElement, links: HTMLAnchorElement[]): 
   tbody.replaceChildren(fragment);
 }
 
+/**
+ * Builds one table row with up to three record-type link cells.
+ */
 function buildRow(rowIndex: number, links: HTMLAnchorElement[]): HTMLTableRowElement {
   const row = document.createElement('tr');
   row.className =
@@ -293,6 +328,9 @@ function buildRow(rowIndex: number, links: HTMLAnchorElement[]): HTMLTableRowEle
   return row;
 }
 
+/**
+ * Returns true when an anchor points to a saved-search record-type definition page.
+ */
 function isRecordTypeLink(anchor: HTMLAnchorElement): boolean {
   const href = anchor.getAttribute('href') ?? '';
   const resolved = anchor.href;
@@ -308,14 +346,19 @@ function isRecordTypeLink(anchor: HTMLAnchorElement): boolean {
   return getLinkLabel(anchor).length > 0;
 }
 
+/** Returns true when a URL string contains a searchtype query parameter. */
 function hasSearchTypeParam(value: string): boolean {
   return /[?&]searchtype=/i.test(value);
 }
 
+/** Returns true when a URL string references search.nl. */
 function mentionsSearchNl(value: string): boolean {
   return /search\.nl/i.test(value);
 }
 
+/**
+ * Builds a stable deduplication key from searchtype and rectype URL parameters.
+ */
 function getLinkKey(anchor: HTMLAnchorElement): string {
   try {
     const url = new URL(anchor.href, location.origin);
@@ -327,6 +370,7 @@ function getLinkKey(anchor: HTMLAnchorElement): string {
   }
 }
 
+/** Returns the trimmed, normalized visible text of a record-type link. */
 function getLinkLabel(anchor: HTMLAnchorElement): string {
   return anchor.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 }
