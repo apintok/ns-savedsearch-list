@@ -194,7 +194,10 @@ function installFilterBar(table: HTMLTableElement, totalCount: number): void {
   const label = document.createElement('label');
   label.className = 'ns-ssl-filter-label';
   label.htmlFor = FILTER_INPUT_ID;
-  label.textContent = 'Filter search types';
+
+  const labelText = document.createElement('span');
+  labelText.className = 'ns-ssl-filter-label-text';
+  labelText.textContent = 'Filter search types:';
 
   const input = document.createElement('input');
   input.type = 'search';
@@ -217,6 +220,7 @@ function installFilterBar(table: HTMLTableElement, totalCount: number): void {
     updateFilterStatus(status, filtered.length, totalCount, query);
   });
 
+  label.appendChild(labelText);
   label.appendChild(input);
   cell.appendChild(label);
   cell.appendChild(status);

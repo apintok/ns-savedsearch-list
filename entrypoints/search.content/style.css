@@ -19,11 +19,16 @@ table.ns-ssl-transformed tbody a.dottedlink {
 }
 
 .ns-ssl-filter-label {
-  display: block;
+  display: flex;
+  align-items: center;
   margin-bottom: 4px;
   font-size: 12px;
   font-weight: 600;
   color: #333;
+}
+
+.ns-ssl-filter-label-text {
+  padding-right: 10px;
 }
 
 .ns-ssl-filter-input {
